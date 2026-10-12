@@ -15,6 +15,7 @@ import { ZoomControls } from './components/ZoomControls';
 import { EvolutionControlPanel } from './components/EvolutionControlPanel';
 import { AccessibleGameStatePanel, type GameStateData } from './components/AccessibleGameStatePanel';
 import { ModeSelectorBar, type ActiveInteractionMode } from './components/ModeSelectorBar';
+import { QuickGuideModal } from './components/QuickGuideModal';
 import { GodToolsPanel, type GodToolType } from './components/GodToolsPanel';
 import { ResearchChart, type MetricSample } from './components/ResearchChart';
 import { PlayerInspectorPanel, type InspectedCreatureData } from './components/PlayerInspectorPanel';
@@ -157,6 +158,7 @@ interface UIState {
   inspectedCreature: InspectedCreatureData | null;
   metricSamples: MetricSample[];
   feedbackToast: string | null;
+  showQuickGuide: boolean;
 }
 
 export class UIController {
@@ -258,6 +260,7 @@ export class UIController {
         inspectedCreature: null,
         metricSamples: [],
         feedbackToast: null,
+        showQuickGuide: false,
       }));
 
       useEffect(() => {
@@ -447,6 +450,7 @@ export class UIController {
             seed={state.worldSeed}
             totalPopulation={state.totalPopulation}
             totalFood={state.totalFood}
+            onOpenGuide={() => setState(s => ({ ...s, showQuickGuide: true }))}
           />
 
           {/* God Mode Floating Tool Palette */}
@@ -594,6 +598,11 @@ export class UIController {
             </LazyComponent>
           )}
 
+                    {/* Quick Guide Modal */}
+          <QuickGuideModal
+            isOpen={state.showQuickGuide}
+            onClose={() => setState(s => ({ ...s, showQuickGuide: false }))}
+          />
           {/* Trait Editor Modal */}
           {state.showTraitEditor && state.currentTraits && (
             <LazyComponent>

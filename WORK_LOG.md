@@ -87,3 +87,70 @@ Dự án: **Living World Lab**
 ## 4. Danh mục Commit & Trạng thái Git
 - Branch hiện tại: `batch-2-simulation-core`.
 - Toàn bộ tính năng Batch 2 đã hoàn thành, kiểm tra an toàn và sẵn sàng commit.
+
+---
+
+## BATCH 3: QUALITY GATE, UX POLISH & PORTFOLIO RELEASE (12/10/2026)
+
+### 1. Mục tiêu Batch 3
+- Thực hiện kiểm thử toàn diện (Quality Gate): test tự động, type-check, lint, production build.
+- UX Polish: Tích hợp bảng hướng dẫn nhanh (`QuickGuideModal`), phím tắt, chú thích màu loài và xuất dữ liệu nghiên cứu CSV (`[📥 Export CSV]`).
+- Kiểm tra độ bền bỉ runtime: Xử lý tuyệt chủng, cạn kiệt thức ăn, bùng nổ dân số, hủy chọn an toàn.
+- Hoàn thiện bộ tài liệu bàn giao danh mục sản phẩm (Portfolio Release).
+
+### 2. Các Bước Kỹ Thuật Đã Triển Khai
+- **Bảng Hướng Dẫn Tích Hợp (`src/ui/components/QuickGuideModal.tsx`):**
+  - Cung cấp tóm tắt trực quan 3 chế độ: God, Research, Player.
+  - Hướng dẫn bảng màu nhận diện sinh vật (Herbivore, Carnivore, Omnivore, Glucose, Rock).
+  - Bảng phím tắt bàn phím tiện ích (Space, WASD, +/- Zoom, Reset Zoom, Phím nhạc).
+- **Kích Hoạt Hướng Dẫn từ Menu (`ModeSelectorBar.tsx` & `UIController.tsx`):**
+  - Thêm nút `[❓ Guide]` phong cách glassmorphism hiện đại tại thanh điều hướng đỉnh.
+  - Quản lý đóng mở modal an toàn, chặn click xuyên qua màn hình mô phỏng.
+- **Xuất Dữ Liệu Nghiên Cứu CSV (`src/ui/components/ResearchChart.tsx`):**
+  - Bổ sung nút `[📥 Export CSV]` cho phép tải về toàn bộ chuỗi mẫu số liệu thời gian thực (Time, Herbivores, Carnivores, Omnivores, Total, Food, AvgATP).
+- **Rà soát Giới hạn Bộ nhớ & Rò rỉ Dữ liệu:**
+  - Xác nhận `metricSamples` được giới hạn cố định tối đa 60 mẫu trượt.
+  - Xác nhận `Config.MAX_POPULATION` ngăn chặn hiện tượng sinh sản vô hạn làm tràn bộ nhớ.
+  - Đảm bảo cơ chế hủy chọn an toàn khi sinh vật qua đời hoặc bị xóa.
+
+### 3. Bằng chứng Đo kiểm Chất lượng Kỹ thuật
+
+1. **Bộ Kiểm thử Tự động (Unit Tests):**
+   ```text
+   > vitest run
+   Test Files: 16 passed (16)
+   Tests:      74 passed (74) — 100% PASS
+   Duration:   4.18s
+   ```
+
+2. **Kiểm tra Kiểu dữ liệu TypeScript (Type-Check):**
+   ```text
+   > tsc --noEmit
+   Exit Code: 0 (0 errors)
+   ```
+
+3. **Kiểm tra Lint (ESLint):**
+   ```text
+   > eslint . --ext ts,tsx
+   0 errors, 28 warnings (tất cả cảnh báo đều thuộc mã nguồn upstream chưa dùng tham số).
+   ```
+
+4. **Đóng gói Sản phẩm Phát hành (Production Build):**
+   ```text
+   > tsc && vite build
+   ✓ 2334 modules transformed.
+   dist/index.html                           10.23 kB
+   dist/assets/index-Doi12Keo.js            355.54 kB
+   dist/assets/vendor-graphics-CDqUFMYs.js  558.38 kB
+   ✓ built in 1.44s
+   ```
+
+5. **Hiệu năng Khung hình Thực nghiệm:**
+   - Ổn định tại **58.5 – 60.0 FPS** trên máy thông dụng.
+   - Thời gian render khung hình trung bình: ~16.5ms.
+
+---
+
+## 4. Danh mục Commit & Hoàn tất Scope
+- Đóng toàn bộ phạm vi MVP Living World Lab.
+- Đạt 100% tiêu chí Definition of Done (DoD).

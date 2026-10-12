@@ -12,6 +12,7 @@ interface ModeSelectorBarProps {
   seed: number;
   totalPopulation: number;
   totalFood: number;
+  onOpenGuide?: () => void;
 }
 
 export const ModeSelectorBar: React.FC<ModeSelectorBarProps> = ({
@@ -23,6 +24,7 @@ export const ModeSelectorBar: React.FC<ModeSelectorBarProps> = ({
   seed,
   totalPopulation,
   totalFood,
+  onOpenGuide,
 }) => {
   return (
     <header
@@ -144,6 +146,31 @@ export const ModeSelectorBar: React.FC<ModeSelectorBarProps> = ({
           ))}
         </select>
       </div>
+
+      {/* Quick Guide Trigger */}
+      {onOpenGuide && (
+        <button
+          onClick={onOpenGuide}
+          title="Open Living World Lab User Guide"
+          style={{
+            background: 'rgba(0, 229, 255, 0.15)',
+            border: '1px solid rgba(0, 229, 255, 0.4)',
+            color: '#00e5ff',
+            borderRadius: '16px',
+            padding: '4px 10px',
+            fontSize: '11px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <span>❓</span>
+          <span>Guide</span>
+        </button>
+      )}
 
       {/* Live State Badges */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: '#b0bec5' }}>

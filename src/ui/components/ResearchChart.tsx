@@ -106,6 +106,23 @@ export const ResearchChart: React.FC<ResearchChartProps> = ({
     drawLine(s => s.total, '#00e5ff', 2.5);                     // Cyan: Total Population
   }, [samples]);
 
+  const exportCsv = () => {
+    if (typeof window === 'undefined' || samples.length === 0) return;
+    const header = 'Time,Herbivores,Carnivores,Omnivores,Total,Food,AvgATP\n';
+    const rows = samples
+      .map(s => `${s.time},${s.herbivores},${s.carnivores},${s.omnivores},${s.total},${s.food},${(s.avgAtp || 0).toFixed(2)}`)
+      .join('\n');
+    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `living_world_metrics_seed_${seed}_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const latest = samples[samples.length - 1] || {
     herbivores: 0,
     carnivores: 0,
@@ -132,8 +149,28 @@ export const ResearchChart: React.FC<ResearchChartProps> = ({
           <span style={{ fontWeight: 700, fontSize: '14px', color: '#00e5ff' }}>POPULATION TIMELINE</span>
           <span style={{ fontSize: '11px', color: '#8892b0', marginLeft: '8px' }}>Seed: #{seed}</span>
         </div>
-        <div style={{ fontSize: '11px', background: 'rgba(0, 229, 255, 0.1)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(0, 229, 255, 0.2)' }}>
-          {activeScenarioName}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ fontSize: '11px', background: 'rgba(0, 229, 255, 0.1)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(0, 229, 255, 0.2)' }}>
+            {activeScenarioName}
+          </div>
+          <button
+            onClick={exportCsv}
+            disabled={samples.length === 0}
+            title="Export simulation metrics to CSV"
+            style={{
+              background: 'rgba(0, 229, 255, 0.15)',
+              border: '1px solid rgba(0, 229, 255, 0.4)',
+              borderRadius: '4px',
+              color: '#00e5ff',
+              padding: '2px 8px',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: samples.length === 0 ? 'not-allowed' : 'pointer',
+              opacity: samples.length === 0 ? 0.5 : 1,
+            }}
+          >
+            📥 Export CSV
+          </button>
         </div>
       </div>
 

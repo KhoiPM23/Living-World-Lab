@@ -1,7 +1,7 @@
 ﻿# KIẾN TRÚC HỆ THỐNG — SYSTEM ARCHITECTURE
 Dự án: **Living World Lab**  
 Nền tảng cơ sở: **Forked/Bootstrapped từ EvoLab (MIT License)**  
-Cập nhật Batch 2: **Simulation Core, 3-Mode Interaction & Real-time Analytics**
+Cập nhật Batch 3: **Quality Gate, UX Polish & Production Portfolio Release**
 
 ---
 
@@ -12,7 +12,7 @@ Cập nhật Batch 2: **Simulation Core, 3-Mode Interaction & Real-time Analytic
 |                                    LIVING WORLD LAB                                     |
 +-----------------------------------------------------------------------------------------+
                                              |
-                   [ ModeSelectorBar: God | Research | Player | Scenarios ]
+                   [ ModeSelectorBar: God | Research | Player | Scenarios | Guide ]
                                              |
          +-----------------------------------+-----------------------------------+
          |                                   |                                   |

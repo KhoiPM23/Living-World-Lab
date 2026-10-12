@@ -41,5 +41,5 @@
 
 ## 4. Kế hoạch Lộ trình (Vertical Slice)
 - **Batch 1 (Hoàn thành):** Đánh giá 5+ mã nguồn mở, thẩm định bản quyền, lựa chọn nền tảng EvoLab, clone/bootstrap repository, xác minh test suite (60/60 pass) và build sạch (1.31s).
-- **Batch 2:** Tinh chỉnh UI/HUD để thống nhất 3 chế độ tương tác (God / Research / Player Mode switcher), tối ưu luồng can thiệp God-mode và tinh giản các tính năng dư thừa.
-- **Batch 3:** Bổ sung kịch bản thử nghiệm mẫu (Scenarios), cải tiến đồ thị phân tích Research Mode, hoàn thiện tài liệu hướng dẫn và portfolio.
+- **Batch 2 (Hoàn thành):** Triển khai trọn vẹn 3 chế độ tương tác (God, Research, Player), chướng ngại vật rạn đá, tính tất định PRNG Mulberry32, động cơ kịch bản mẫu và biểu đồ Canvas 2D thực tế.
+- **Batch 3 (Hoàn thành - MVP Release):** Quality Gate (74/74 tests pass, 0 type errors, 0 lint errors, build 1.44s), UX polish (Quick Guide Modal, CSV Data Export, phím tắt), hoàn thiện tài liệu bàn giao sản phẩm.
