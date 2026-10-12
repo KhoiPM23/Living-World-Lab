@@ -5,11 +5,13 @@
 
 import type { PixiApp } from '../rendering/PixiApp';
 import type { EntityManager } from '../entities/EntityManager';
+import type { Cell } from '../entities/Cell';
 
 export class CameraController {
   private renderer: PixiApp;
   private entityManager: EntityManager;
   private currentZoom = 1.0;
+  private targetCell: Cell | null = null;
 
   constructor(renderer: PixiApp, entityManager: EntityManager) {
     this.renderer = renderer;
@@ -21,6 +23,16 @@ export class CameraController {
    * Handles both single-cell and species-level modes
    */
   update(): void {
+    // If a specific target cell is locked (e.g. Player Mode selection), track it
+    if (this.targetCell) {
+      if (this.targetCell.sprite && !this.targetCell.sprite.destroyed && this.targetCell.traits.atp > 0) {
+        this.renderer.updateCamera(this.targetCell.position.x, this.targetCell.position.y);
+        return;
+      } else {
+        this.targetCell = null;
+      }
+    }
+
     // Species-level camera (follows species center)
     if (this.entityManager.playerSpecies) {
       const species = this.entityManager.playerSpecies;
@@ -59,6 +71,20 @@ export class CameraController {
       const player = this.entityManager.playerCell;
       this.renderer.updateCamera(player.position.x, player.position.y);
     }
+  }
+
+  /**
+   * Set target cell to track
+   */
+  setTargetCell(cell: Cell | null): void {
+    this.targetCell = cell;
+  }
+
+  /**
+   * Get currently tracked cell
+   */
+  getTargetCell(): Cell | null {
+    return this.targetCell;
   }
 
   /**

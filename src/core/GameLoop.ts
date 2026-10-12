@@ -37,6 +37,12 @@ import { LeaderboardSystem } from '../achievements/LeaderboardSystem';
 import { NearMissTracker } from '../achievements/NearMissTracker';
 import { gameStateAnnouncer } from '../utils/GameStateAnnouncer';
 import { logger } from '../utils/Logger';
+import { PRESET_SCENARIOS, type ScenarioConfig } from '../scenarios/PresetScenarios';
+import type { ActiveInteractionMode } from '../ui/components/ModeSelectorBar';
+import type { GodToolType } from '../ui/components/GodToolsPanel';
+import type { MetricSample } from '../ui/components/ResearchChart';
+import { defaultPRNG } from '../utils/SeededRandom';
+import { Graphics } from 'pixi.js';
 
 const MAX_COMPETITOR_SPECIES = 6;
 
@@ -148,6 +154,15 @@ export class GameLoop {
   private totalResourcesCollected = 0;
   private musicPresetChangeHandler: EventListener | null = null;
   private biomeHighlightHandler: EventListener | null = null;
+  private activeMode: ActiveInteractionMode = 'player';
+  private activeGodTool: GodToolType = 'inspect';
+  private activeScenarioId = 'thriving_garden';
+  private worldSeed = 1337;
+  private selectedCreature: Cell | null = null;
+  private selectionIndicator: Graphics | null = null;
+  private metricSamples: MetricSample[] = [];
+  private sampleAccumulator = 0;
+  private canvasPointerHandler: ((e: PointerEvent) => void) | null = null;
 
   constructor() {
     this.renderer = new PixiApp();
@@ -258,6 +273,60 @@ export class GameLoop {
         this.pendingModifications = modifications;
       }
     });
+
+    // Living World Lab 3-Mode Callbacks
+    this.uiController.onModeChange = (mode) => {
+      this.activeMode = mode;
+      if (mode === 'player' && !this.selectedCreature) {
+        const cells = this.entityManager.getAllCells();
+        if (cells.length > 0 && cells[0]) this.selectCreature(cells[0]);
+      }
+    };
+
+    this.uiController.onGodToolChange = (tool) => {
+      this.activeGodTool = tool;
+    };
+
+    this.uiController.onScenarioChange = (scId) => {
+      this.applyScenario(scId);
+    };
+
+    this.uiController.onPlayerFeed = (id) => {
+      this.entityManager.feedCell(id, 50);
+      this.uiController.showToast('⚡ Supplied +50 ATP Energy');
+    };
+
+    this.uiController.onPlayerDropFood = (id) => {
+      const cell = this.entityManager.getCellById(id);
+      if (cell) {
+        this.entityManager.spawnResource(cell.position.x + 30, cell.position.y, 'glucose');
+        this.uiController.showToast('🍎 Dropped Food Nearby');
+      }
+    };
+
+    this.uiController.onPlayerDeselect = () => {
+      this.deselectCreature();
+    };
+
+    this.uiController.onGodClearObstacles = () => {
+      this.entityManager.clearObstacles();
+      this.uiController.showToast('🧹 Cleared all rock obstacles');
+    };
+
+    this.uiController.onGodReplenishFood = () => {
+      for (let i = 0; i < 30; i++) {
+        this.entityManager.spawnResource(
+          (Math.random() - 0.5) * Config.LAKE_WIDTH,
+          (Math.random() - 0.5) * Config.LAKE_HEIGHT
+        );
+      }
+      this.uiController.showToast('🍎 Replenished +30 Food Clusters');
+    };
+
+    this.uiController.onGodStepTick = () => {
+      this.timeControl.step();
+      this.uiController.showToast('⏭️ Stepped 1 Tick');
+    };
 
     this.uiController.onReportContinue(() => {
       // Show trait editor after generation report (species-level)
@@ -1513,8 +1582,193 @@ export class GameLoop {
     }
   }
 
+  private setupInteractivity(): void {
+    const canvas = this.renderer.app.canvas;
+    if (!canvas) return;
+
+    this.canvasPointerHandler = (e: PointerEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && target.closest && target.closest('#ui-root')) {
+        return;
+      }
+
+      const rect = canvas.getBoundingClientRect();
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+      const worldPos = this.renderer.worldContainer.toLocal({ x: screenX, y: screenY });
+
+      if (this.activeMode === 'god') {
+        this.handleGodToolAction(this.activeGodTool, worldPos.x, worldPos.y);
+      } else if (this.activeMode === 'player') {
+        const cell = this.entityManager.findNearestCell(worldPos.x, worldPos.y, 60);
+        if (cell) {
+          this.selectCreature(cell);
+        } else {
+          this.deselectCreature();
+        }
+      }
+    };
+
+    canvas.addEventListener('pointerdown', this.canvasPointerHandler);
+  }
+
+  private handleGodToolAction(tool: GodToolType, x: number, y: number): void {
+    switch (tool) {
+      case 'spawn_herbivore':
+        this.entityManager.spawnCreature('herbivore', x, y);
+        this.renderer.particleSystem.createEatingEffect(x, y, 0x4caf50);
+        this.uiController.showToast('🟢 Spawned Herbivore');
+        break;
+      case 'spawn_carnivore':
+        this.entityManager.spawnCreature('carnivore', x, y);
+        this.renderer.particleSystem.createEatingEffect(x, y, 0xf44336);
+        this.uiController.showToast('🔴 Spawned Carnivore');
+        break;
+      case 'spawn_omnivore':
+        this.entityManager.spawnCreature('omnivore', x, y);
+        this.renderer.particleSystem.createEatingEffect(x, y, 0xff9800);
+        this.uiController.showToast('🟡 Spawned Omnivore');
+        break;
+      case 'spawn_food':
+        this.entityManager.spawnResource(x, y, 'glucose');
+        this.renderer.particleSystem.createEatingEffect(x, y, 0xffd700);
+        this.uiController.showToast('🍎 Dropped Glucose');
+        break;
+      case 'spawn_obstacle':
+        this.entityManager.addObstacle(x, y, 35);
+        this.uiController.showToast('🪨 Placed Rock Barrier');
+        break;
+      case 'erase': {
+        const res = this.entityManager.removeEntityAt(x, y, 40);
+        if (res.removed) {
+          this.renderer.particleSystem.createDeathBurst(x, y, 0xff1744);
+          this.uiController.showToast('🗑️ Erased ' + res.type);
+        }
+        break;
+      }
+      case 'inspect': {
+        const cell = this.entityManager.findNearestCell(x, y, 60);
+        if (cell) this.selectCreature(cell);
+        else this.deselectCreature();
+        break;
+      }
+    }
+  }
+
+  private selectCreature(cell: Cell): void {
+    this.selectedCreature = cell;
+    this.renderer.updateCamera(cell.position.x, cell.position.y);
+    this.pushInspectedCreatureData(cell);
+    this.uiController.showToast('Locked focus on ' + this.getSpeciesLabel(cell));
+  }
+
+  private deselectCreature(): void {
+    this.selectedCreature = null;
+    // camera focus released
+    if (this.selectionIndicator) {
+      this.selectionIndicator.visible = false;
+    }
+    this.uiController.updateLivingWorldData({ inspectedCreature: null });
+  }
+
+  private pushInspectedCreatureData(cell: Cell): void {
+    this.uiController.updateLivingWorldData({
+      inspectedCreature: {
+        id: cell.id,
+        name: cell.id,
+        type: this.getSpeciesLabel(cell) as any,
+        atp: cell.traits.atp,
+        maxATP: cell.traits.maxATP,
+        health: cell.traits.health,
+        maxHealth: cell.traits.maxHealth,
+        survivalTime: cell.survivalTime,
+        speed: cell.traits.speed,
+        size: cell.traits.size,
+        senseRange: cell.traits.visionRange || 100,
+        metabolism: cell.traits.metabolismRate,
+        color: cell.traits.color,
+      },
+    });
+  }
+
+  private getSpeciesLabel(cell: Cell): string {
+    const id = cell.id.toLowerCase();
+    if (cell.isPlayer) return 'Player';
+    if (id.includes('carnivore')) return 'Carnivore';
+    if (id.includes('omnivore')) return 'Omnivore';
+    return 'Herbivore';
+  }
+
+  private recordMetricSample(): void {
+    const allCells = this.entityManager.getAllCells();
+    const resources = this.entityManager.getResources();
+    const herbs = allCells.filter(c => c.id.toLowerCase().includes('herbivore')).length;
+    const carns = allCells.filter(c => c.id.toLowerCase().includes('carnivore')).length;
+    const omnis = allCells.filter(c => c.id.toLowerCase().includes('omnivore')).length;
+    const activeFood = resources.filter(r => !r.isCollected).length;
+    const avgAtp =
+      allCells.length > 0
+        ? allCells.reduce((acc, c) => acc + c.traits.atp, 0) / allCells.length
+        : 0;
+
+    this.metricSamples.push({
+      time: Math.round(Date.now() / 1000),
+      herbivores: herbs,
+      carnivores: carns,
+      omnivores: omnis,
+      total: allCells.length,
+      food: activeFood,
+      avgAtp,
+    });
+
+    if (this.metricSamples.length > 60) {
+      this.metricSamples.shift();
+    }
+
+    this.uiController.updateLivingWorldData({
+      metricSamples: [...this.metricSamples],
+      totalPopulation: allCells.length,
+      totalFood: activeFood,
+      worldSeed: this.worldSeed,
+    });
+  }
+
+  public applyScenario(scenarioId: string): void {
+    const cfg = PRESET_SCENARIOS.find(s => s.id === scenarioId);
+    if (!cfg) return;
+
+    this.activeScenarioId = cfg.id;
+    this.worldSeed = cfg.seed;
+    defaultPRNG.reset(cfg.seed);
+
+    // Reinitialize population setup
+    this.entityManager.populationManager.initializeCustomSpecies([
+      { name: 'Herbivore', type: BehaviorType.HERBIVORE, population: cfg.species.herbivores, color: Config.HERBIVORE_COLOR },
+      { name: 'Carnivore', type: BehaviorType.CARNIVORE, population: cfg.species.carnivores, color: Config.CARNIVORE_COLOR },
+      { name: 'Omnivore', type: BehaviorType.OMNIVORE, population: cfg.species.omnivores, color: Config.OMNIVORE_COLOR },
+    ]);
+
+    // Clear and replenish food & obstacles
+    this.entityManager.clearObstacles();
+    for (let i = 0; i < cfg.obstaclesCount; i++) {
+      const angle = (i / cfg.obstaclesCount) * Math.PI * 2;
+      const dist = 220 + (i % 2) * 80;
+      this.entityManager.addObstacle(Math.cos(angle) * dist, Math.sin(angle) * dist, 35);
+    }
+
+    this.metricSamples = [];
+    this.deselectCreature();
+    this.uiController.showToast('Applied Scenario: ' + cfg.name);
+  }
+
   // Dispose resources
   async dispose(): Promise<void> {
+    if (this.canvasPointerHandler && this.renderer.app.canvas) {
+      this.renderer.app.canvas.removeEventListener('pointerdown', this.canvasPointerHandler);
+    }
+    if (this.selectionIndicator) {
+      this.selectionIndicator.destroy();
+    }
     this.stop();
 
     // Remove event listeners to prevent memory leaks

@@ -2,6 +2,8 @@
 
 import { Cell } from './Cell';
 import { Resource } from './Resource';
+import { Obstacle } from './Obstacle';
+import { BehaviorType } from '../ai/AIBehavior';
 import { PixiApp } from '../rendering/PixiApp';
 import { BiomeGenerator } from '../environment/BiomeGenerator';
 import { Config } from '../core/Config';
@@ -18,6 +20,7 @@ import { logger } from '../utils/Logger';
 export class EntityManager {
   private cells: Map<string, Cell> = new Map();
   private resources: Map<string, Resource> = new Map();
+  private obstacles: Map<string, Obstacle> = new Map();
   private renderer: PixiApp;
   private biomeGenerator: BiomeGenerator;
   private soundManager: SoundManager | null = null;
@@ -148,6 +151,25 @@ export class EntityManager {
     this.resources.forEach(resource => {
       resource.update(deltaTime, Config.GLUCOSE_RESPAWN_TIME);
     });
+
+    // Check obstacle collisions for all cells
+    if (this.obstacles.size > 0) {
+      allCells.forEach(cell => {
+        const cellRadius = 10 + (cell.traits?.size || 5);
+        this.obstacles.forEach(obstacle => {
+          const col = obstacle.checkCollision(cell.position, cellRadius);
+          if (col.collided) {
+            cell.position.x += col.normal.x * col.overlap;
+            cell.position.y += col.normal.y * col.overlap;
+            const dot = cell.velocity.x * col.normal.x + cell.velocity.y * col.normal.y;
+            if (dot < 0) {
+              cell.velocity.x -= 1.5 * dot * col.normal.x;
+              cell.velocity.y -= 1.5 * dot * col.normal.y;
+            }
+          }
+        });
+      });
+    }
   }
 
   // Check combo status and award bonuses (dopamine boost!)
@@ -292,9 +314,153 @@ export class EntityManager {
     return stats;
   }
 
+  // Obstacle management
+  addObstacle(x: number, y: number, radius = 35): Obstacle {
+    const id = `obstacle-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    // Create rock sprite (dark grey with slight border)
+    const sprite = this.renderer.createCircle(x, y, radius, 0x4a4d52);
+    this.renderer.addToWorld(sprite);
+
+    const obstacle = new Obstacle(id, x, y, radius, sprite);
+    this.obstacles.set(id, obstacle);
+    return obstacle;
+  }
+
+  removeObstacle(id: string): boolean {
+    const obs = this.obstacles.get(id);
+    if (obs) {
+      this.renderer.removeFromWorld(obs.sprite);
+      obs.dispose();
+      this.obstacles.delete(id);
+      return true;
+    }
+    return false;
+  }
+
+  clearObstacles(): void {
+    this.obstacles.forEach(obs => {
+      this.renderer.removeFromWorld(obs.sprite);
+      obs.dispose();
+    });
+    this.obstacles.clear();
+  }
+
+  getObstacles(): Obstacle[] {
+    return Array.from(this.obstacles.values());
+  }
+
+  // God Mode: spawn creature of specific diet type at given coordinates
+  spawnCreature(type: 'herbivore' | 'carnivore' | 'omnivore', x: number, y: number): Cell | null {
+    let behaviorType: BehaviorType;
+    switch (type) {
+      case 'carnivore':
+        behaviorType = BehaviorType.CARNIVORE;
+        break;
+      case 'omnivore':
+        behaviorType = BehaviorType.OMNIVORE;
+        break;
+      default:
+        behaviorType = BehaviorType.HERBIVORE;
+        break;
+    }
+    return this.populationManager.spawnSpeciesCell(behaviorType, x, y);
+  }
+
+  // God Mode: spawn a resource at given coordinates
+  spawnResource(x: number, y: number, type: 'glucose' | 'aminoAcid' | 'phosphate' = 'glucose'): Resource {
+    const id = `${type}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    let color: number = Config.GLUCOSE_COLOR;
+    if (type === 'aminoAcid') color = 0x4fc3f7;
+    if (type === 'phosphate') color = 0xab47bc;
+
+    const sprite = this.renderer.createCircle(x, y, Config.GLUCOSE_RADIUS, color);
+    this.renderer.addToWorld(sprite);
+
+    const resource = new Resource(id, x, y, type, sprite, 'common');
+    this.resources.set(id, resource);
+    return resource;
+  }
+
+  // God Mode: remove entity (cell, resource, or obstacle) closest to clicked coordinates
+  removeEntityAt(worldX: number, worldY: number, tolerance = 35): { removed: boolean; type?: string; id?: string } {
+    // 1. Check obstacles
+    for (const [id, obs] of this.obstacles.entries()) {
+      const dx = obs.position.x - worldX;
+      const dy = obs.position.y - worldY;
+      if (dx * dx + dy * dy <= (obs.radius + tolerance) * (obs.radius + tolerance)) {
+        this.removeObstacle(id);
+        return { removed: true, type: 'obstacle', id };
+      }
+    }
+
+    // 2. Check cells
+    const allCells = this.getAllCells();
+    for (const cell of allCells) {
+      const dx = cell.position.x - worldX;
+      const dy = cell.position.y - worldY;
+      const r = 10 + (cell.traits?.size || 5) + tolerance;
+      if (dx * dx + dy * dy <= r * r) {
+        this.populationManager.removeCell(cell.id);
+        return { removed: true, type: 'cell', id: cell.id };
+      }
+    }
+
+    // 3. Check resources
+    for (const [id, res] of this.resources.entries()) {
+      const dx = res.position.x - worldX;
+      const dy = res.position.y - worldY;
+      if (dx * dx + dy * dy <= (Config.GLUCOSE_RADIUS + tolerance) * (Config.GLUCOSE_RADIUS + tolerance)) {
+        this.renderer.removeFromWorld(res.sprite);
+        res.dispose();
+        this.resources.delete(id);
+        return { removed: true, type: 'resource', id };
+      }
+    }
+
+    return { removed: false };
+  }
+
+  // Player Mode / Inspector: find nearest cell to coordinates
+  findNearestCell(x: number, y: number, maxDistance = 60): Cell | null {
+    let nearest: Cell | null = null;
+    let minDistSq = maxDistance * maxDistance;
+
+    const allCells = this.getAllCells();
+    for (const cell of allCells) {
+      const dx = cell.position.x - x;
+      const dy = cell.position.y - y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < minDistSq) {
+        minDistSq = distSq;
+        nearest = cell;
+      }
+    }
+    return nearest;
+  }
+
+  // Player Mode: feed / boost cell energy
+  feedCell(cellId: string, atpAmount = 50): boolean {
+    const cell = this.getCellById(cellId);
+    if (cell) {
+      cell.restoreATP(atpAmount);
+      // Spawn eating/energize particle effect
+      this.renderer.particleSystem.createEatingEffect(cell.position.x, cell.position.y, 0x00ff88);
+      return true;
+    }
+    return false;
+  }
+
+  // Find cell by ID
+  getCellById(id: string): Cell | null {
+    const allCells = this.getAllCells();
+    return allCells.find(c => c.id === id) || null;
+  }
+
   dispose(): void {
     this.cells.forEach(cell => cell.dispose());
     this.resources.forEach(resource => resource.dispose());
+    this.obstacles.forEach(obs => obs.dispose());
+    this.obstacles.clear();
     this.playerSpecies?.dispose();
     this.populationManager.dispose();
     this.cells.clear();

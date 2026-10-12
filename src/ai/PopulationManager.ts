@@ -153,11 +153,11 @@ export class PopulationManager {
     }
   }
 
-  // Spawn a cell for a species
-  private spawnCell(species: Species): void {
-    // Random position in lake
-    const x = (Math.random() - 0.5) * this.lakeWidth;
-    const y = (Math.random() - 0.5) * this.lakeHeight;
+  // Spawn a cell for a species (optionally at custom coordinates)
+  public spawnCell(species: Species, customX?: number, customY?: number): Cell {
+    // Position in lake (custom or random)
+    const x = customX !== undefined ? customX : (Math.random() - 0.5) * this.lakeWidth;
+    const y = customY !== undefined ? customY : (Math.random() - 0.5) * this.lakeHeight;
 
     // Clone genome with slight variation
     const genome = species.baseGenome.clone();
@@ -192,6 +192,21 @@ export class PopulationManager {
 
     this.aiBehaviors.set(cell.id, behavior);
     species.population.push(cell);
+    return cell;
+  }
+
+  // Spawn cell of a given behavior type at position (used by God Mode)
+  public spawnSpeciesCell(type: BehaviorType, x: number, y: number): Cell | null {
+    for (const species of this.species.values()) {
+      if (species.behaviorType === type) {
+        return this.spawnCell(species, x, y);
+      }
+    }
+    const first = Array.from(this.species.values())[0];
+    if (first) {
+      return this.spawnCell(first, x, y);
+    }
+    return null;
   }
 
   // Remove a cell

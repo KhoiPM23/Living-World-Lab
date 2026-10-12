@@ -14,6 +14,11 @@ import { BiomeLegend } from './components/BiomeLegend';
 import { ZoomControls } from './components/ZoomControls';
 import { EvolutionControlPanel } from './components/EvolutionControlPanel';
 import { AccessibleGameStatePanel, type GameStateData } from './components/AccessibleGameStatePanel';
+import { ModeSelectorBar, type ActiveInteractionMode } from './components/ModeSelectorBar';
+import { GodToolsPanel, type GodToolType } from './components/GodToolsPanel';
+import { ResearchChart, type MetricSample } from './components/ResearchChart';
+import { PlayerInspectorPanel, type InspectedCreatureData } from './components/PlayerInspectorPanel';
+import { PRESET_SCENARIOS, type ScenarioConfig } from '../scenarios/PresetScenarios';
 
 // Heavy components - lazy load (only when needed)
 const TraitEditor = lazy(() => import('./components/TraitEditor').then(m => ({ default: m.TraitEditor })));
@@ -143,6 +148,15 @@ interface UIState {
   achievementNotifications: Achievement[];
   gameSetupSpecies: SpeciesSetupOption[];
   currentEvent: GameEvent | null;
+  activeMode: ActiveInteractionMode;
+  activeGodTool: GodToolType;
+  activeScenarioId: string;
+  worldSeed: number;
+  totalPopulation: number;
+  totalFood: number;
+  inspectedCreature: InspectedCreatureData | null;
+  metricSamples: MetricSample[];
+  feedbackToast: string | null;
 }
 
 export class UIController {
@@ -170,6 +184,16 @@ export class UIController {
   private getMusicManager: (() => any) | null = null;
   private timeControl: TimeControl;
   private saveSystem: SaveSystem;
+
+  public onModeChange: ((mode: ActiveInteractionMode) => void) | null = null;
+  public onGodToolChange: ((tool: GodToolType) => void) | null = null;
+  public onScenarioChange: ((scenarioId: string) => void) | null = null;
+  public onPlayerFeed: ((id: string) => void) | null = null;
+  public onPlayerDropFood: ((id: string) => void) | null = null;
+  public onPlayerDeselect: (() => void) | null = null;
+  public onGodClearObstacles: (() => void) | null = null;
+  public onGodReplenishFood: (() => void) | null = null;
+  public onGodStepTick: (() => void) | null = null;
 
   constructor(timeControl: TimeControl, saveSystem: SaveSystem) {
     this.timeControl = timeControl;
@@ -225,6 +249,15 @@ export class UIController {
         achievementNotifications: [],
         gameSetupSpecies: getDefaultSpeciesSetup(),
         currentEvent: null,
+        activeMode: 'player' as ActiveInteractionMode,
+        activeGodTool: 'inspect' as GodToolType,
+        activeScenarioId: 'thriving_garden',
+        worldSeed: 1337,
+        totalPopulation: 0,
+        totalFood: 0,
+        inspectedCreature: null,
+        metricSamples: [],
+        feedbackToast: null,
       }));
 
       useEffect(() => {
@@ -397,6 +430,89 @@ export class UIController {
             showStats={state.showStats}
           />
           </nav>
+
+          {/* Mode Selector Top Header */}
+          <ModeSelectorBar
+            activeMode={state.activeMode}
+            onSelectMode={(mode) => {
+              setState(s => ({ ...s, activeMode: mode }));
+              this.onModeChange?.(mode);
+            }}
+            scenarios={PRESET_SCENARIOS}
+            activeScenarioId={state.activeScenarioId}
+            onSelectScenario={(scId) => {
+              setState(s => ({ ...s, activeScenarioId: scId }));
+              this.onScenarioChange?.(scId);
+            }}
+            seed={state.worldSeed}
+            totalPopulation={state.totalPopulation}
+            totalFood={state.totalFood}
+          />
+
+          {/* God Mode Floating Tool Palette */}
+          {state.activeMode === 'god' && (
+            <div style={{ position: 'fixed', top: '68px', left: '16px', zIndex: 900 }}>
+              <GodToolsPanel
+                activeTool={state.activeGodTool}
+                onSelectTool={(tool) => {
+                  setState(s => ({ ...s, activeGodTool: tool }));
+                  this.onGodToolChange?.(tool);
+                }}
+                onClearObstacles={() => this.onGodClearObstacles?.()}
+                onReplenishFood={() => this.onGodReplenishFood?.()}
+                onStepTick={() => this.onGodStepTick?.()}
+                isPaused={this.timeControl.isPausedState()}
+              />
+            </div>
+          )}
+
+          {/* Research Mode Floating Dashboard / Chart */}
+          {state.activeMode === 'research' && (
+            <div style={{ position: 'fixed', top: '68px', right: '16px', zIndex: 900, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <ResearchChart
+                samples={state.metricSamples}
+                activeScenarioName={PRESET_SCENARIOS.find(s => s.id === state.activeScenarioId)?.name}
+                seed={state.worldSeed}
+              />
+            </div>
+          )}
+
+          {/* Player Mode Floating Creature Inspector */}
+          {state.activeMode === 'player' && (
+            <div style={{ position: 'fixed', top: '68px', left: '16px', zIndex: 900 }}>
+              <PlayerInspectorPanel
+                creature={state.inspectedCreature}
+                onFeed={(id) => this.onPlayerFeed?.(id)}
+                onDropFood={(id) => this.onPlayerDropFood?.(id)}
+                onDeselect={() => {
+                  setState(s => ({ ...s, inspectedCreature: null }));
+                  this.onPlayerDeselect?.();
+                }}
+              />
+            </div>
+          )}
+
+          {/* Feedback Toast */}
+          {state.feedbackToast && (
+            <div style={{
+              position: 'fixed',
+              bottom: '24px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'rgba(0, 229, 255, 0.95)',
+              color: '#0a0e1c',
+              padding: '8px 18px',
+              borderRadius: '20px',
+              fontWeight: 700,
+              fontSize: '13px',
+              boxShadow: '0 4px 20px rgba(0, 229, 255, 0.4)',
+              zIndex: 1100,
+              pointerEvents: 'none',
+              animation: 'fadeIn 0.2s ease',
+            }}>
+              {state.feedbackToast}
+            </div>
+          )}
 
           {/* Time Control Panel */}
           <TimeControlPanel timeControl={this.timeControl} />
@@ -825,6 +941,26 @@ export class UIController {
       ...s,
       gameStateData: gameState,
     }));
+  }
+
+  updateLivingWorldData(data: {
+    activeMode?: ActiveInteractionMode;
+    activeGodTool?: GodToolType;
+    activeScenarioId?: string;
+    worldSeed?: number;
+    totalPopulation?: number;
+    totalFood?: number;
+    inspectedCreature?: InspectedCreatureData | null;
+    metricSamples?: MetricSample[];
+  }) {
+    this.setState?.(s => ({ ...s, ...data }));
+  }
+
+  showToast(message: string) {
+    this.setState?.(s => ({ ...s, feedbackToast: message }));
+    setTimeout(() => {
+      this.setState?.(s => ({ ...s, feedbackToast: null }));
+    }, 2500);
   }
 
   dispose() {
